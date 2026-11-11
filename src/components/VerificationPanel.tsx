@@ -145,3 +145,4 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
     </div>
   );
 };
+

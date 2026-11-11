@@ -178,3 +178,4 @@ export const IncidentsTable: React.FC<IncidentsTableProps> = ({
     </div>
   );
 };
+

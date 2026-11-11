@@ -276,3 +276,4 @@ export const VisionFeed: React.FC<VisionFeedProps> = ({
     </div>
   );
 };
+
