@@ -1,0 +1,6 @@
+# Python deps for the local garbage image scanner.
+# Install into the project venv:
+#   npm run scan:install
+# (the venv already includes ultralytics, torch, pillow, numpy, and opencv)
+fastapi>=0.110
+uvicorn>=0.29

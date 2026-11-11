@@ -34,6 +34,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
     if (e.touches[0]) handleMove(e.touches[0].clientX);
   };
 
@@ -78,6 +79,8 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleMouseDown}
+        onTouchEnd={handleMouseUp}
         onTouchMove={handleTouchMove}
         className="relative w-full aspect-[16/9] cursor-ew-resize select-none bg-zinc-900 overflow-hidden"
       >

@@ -51,7 +51,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
         <div className="mt-4 pt-3 border-t border-zinc-800 text-center">
           <button
             onClick={onClose}
-            className="w-full py-1.5 rounded-md text-xs font-medium bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-850 transition-colors"
+            className="w-full py-1.5 rounded-md text-xs font-medium bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             Got it
           </button>

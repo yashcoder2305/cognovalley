@@ -13,11 +13,13 @@ import { Header } from '@/components/Header';
 import { MetricsBar } from '@/components/MetricsBar';
 import { ZoneList } from '@/components/ZoneList';
 import { VisionFeed } from '@/components/VisionFeed';
+import type { ScanDetectionPayload } from '@/components/VisionFeed';
 import { IncidentsTable } from '@/components/IncidentsTable';
 import { VerificationPanel } from '@/components/VerificationPanel';
 import { DemoModal } from '@/components/DemoModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { Toast, ToastMessage } from '@/components/Toast';
+import { sfx } from '@/utils/sound';
 
 export default function Home() {
   const [zones, setZones] = useState<Zone[]>(INITIAL_ZONES);
@@ -136,6 +138,14 @@ export default function Home() {
 
   // Action: Mark cleaned & verified
   const handleResolveTicket = (ticketId: string) => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const ticketZone = zones.find((z) => z.id === ticket.zoneId);
+    const afterImage = '/media/lobby.jpg';
+    const scoreBefore = ticketZone?.cleanlinessScore ?? 60;
+    const scoreAfter = Math.min(98, scoreBefore + 25);
+
     setTickets((prev) =>
       prev.map((t) =>
         t.id === ticketId
@@ -143,7 +153,7 @@ export default function Home() {
               ...t,
               status: 'resolved',
               resolvedAt: 'Just now',
-              afterImageUrl: 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?auto=format&fit=crop&w=800&q=80',
+              afterImageUrl: afterImage,
             }
           : t
       )
@@ -151,11 +161,11 @@ export default function Home() {
 
     setZones((prev) =>
       prev.map((z) =>
-        z.id === selectedZoneId
+        z.id === ticket.zoneId
           ? {
               ...z,
-              cleanlinessScore: Math.min(98, z.cleanlinessScore + 25),
-              history: [...z.history.slice(1), Math.min(98, z.cleanlinessScore + 25)],
+              cleanlinessScore: scoreAfter,
+              history: [...z.history.slice(1), scoreAfter],
               status: 'optimal',
               activeIncidents: Math.max(0, z.activeIncidents - 1),
             }
@@ -163,11 +173,41 @@ export default function Home() {
       )
     );
 
-    addToast('Incident resolved', `${currentZone.name} verified clean. Cleanliness score restored.`, 'success');
+    // Record the before/after pair so the verification audit reflects this cleanup
+    setVerifications((prev) => [
+      {
+        id: `v-${ticketId}-${Date.now()}`,
+        ticketNumber: ticket.ticketNumber,
+        zoneName: ticket.zoneName,
+        detectedAt: ticket.createdAt,
+        cleanedAt: 'Just now',
+        beforeImage: ticket.beforeImageUrl,
+        afterImage,
+        litterTypes: [ticket.title],
+        cleanlinessBefore: scoreBefore,
+        cleanlinessAfter: scoreAfter,
+      },
+      ...prev,
+    ]);
+
+    addToast('Incident resolved', `${ticket.zoneName} verified clean. Cleanliness score restored.`, 'success');
+    sfx.success();
   };
 
   // Action: Trigger ticket manually from a bounding box
   const handleTriggerTicketFromBox = (box: BoundingBox) => {
+    // Avoid opening duplicate tickets for the same detection while one is still active
+    const alreadyOpen = tickets.some(
+      (t) =>
+        t.zoneId === currentZone.id &&
+        t.title === `${box.label} exceeds persistence threshold` &&
+        t.status !== 'resolved'
+    );
+    if (alreadyOpen) {
+      addToast('Ticket already open', `An active ticket exists for ${box.label} in ${currentZone.name}.`, 'info');
+      return;
+    }
+
     const newTicket: HousekeepingTicket = {
       id: `tkt-${Date.now()}`,
       ticketNumber: `TKT-${Math.floor(1085 + Math.random() * 40)}`,
@@ -180,16 +220,18 @@ export default function Home() {
       createdAt: 'Just now',
       elapsedSeconds: box.persistenceSeconds,
       slaLimitSeconds: 300,
-      beforeImageUrl: 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=800&q=80',
+      beforeImageUrl: '/media/walkway.jpg',
     };
 
     setTickets((prev) => [newTicket, ...prev]);
     addToast('Maintenance ticket opened', `${newTicket.ticketNumber} generated for ${currentZone.name}.`, 'warning');
+    sfx.alert();
   };
 
   // Action: Simulate a spill incident
   const handleTriggerSimulatedWaste = () => {
     setIsSimulatingSpill(true);
+    sfx.alert();
 
     const newBox: BoundingBox = {
       id: `box-${Date.now()}`,
@@ -225,6 +267,65 @@ export default function Home() {
     }, 1200);
   };
 
+  // Action: Create a cleaning ticket from a real scan/webcam detection
+  const handleCreateTicketFromDetection = (detection: ScanDetectionPayload) => {
+    const zone = zones.find((z) => z.id === selectedZoneId) || currentZone;
+    const sourceLabel = detection.source === 'webcam' ? 'live webcam' : 'image scan';
+    const title = `${detection.label} detected via ${sourceLabel}`;
+
+    const duplicate = tickets.find(
+      (t) => t.status !== 'resolved' && t.zoneId === zone.id && t.title === title
+    );
+    if (duplicate) {
+      addToast(
+        'Ticket already open',
+        `${duplicate.ticketNumber} is already queued for ${zone.name}.`,
+        'info'
+      );
+      return;
+    }
+
+    const priority = detection.confidence >= 0.7 ? 'critical' : detection.confidence >= 0.5 ? 'high' : 'medium';
+    const detectionType = detection.label.toLowerCase().includes('bin') ? 'overflowing_bin' : 'litter_debris';
+    const newTicket: HousekeepingTicket = {
+      id: `scan-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      ticketNumber: `TKT-${1101 + tickets.length}`,
+      title,
+      zoneId: zone.id,
+      zoneName: zone.name,
+      type: detectionType,
+      priority,
+      status: 'open',
+      createdAt: 'Just now',
+      elapsedSeconds: 0,
+      slaLimitSeconds: priority === 'critical' ? 300 : 600,
+      beforeImageUrl: '/media/restroom-corridor.jpg',
+    };
+
+    setTickets((prev) => [newTicket, ...prev]);
+
+    setZones((prev) =>
+      prev.map((z) => {
+        if (z.id !== zone.id) return z;
+        const nextScore = Math.max(38, z.cleanlinessScore - 4);
+        return {
+          ...z,
+          cleanlinessScore: nextScore,
+          history: [...z.history.slice(1), nextScore],
+          status: nextScore >= 85 ? 'optimal' : nextScore >= 70 ? 'warning' : 'critical',
+          activeIncidents: z.activeIncidents + 1,
+        };
+      })
+    );
+
+    addToast(
+      'Cleaning ticket created',
+      `${newTicket.ticketNumber} · ${zone.name} · ${detection.label} ${(detection.confidence * 100).toFixed(0)}% confidence.`,
+      'warning'
+    );
+    sfx.alert();
+  };
+
   // Action: Automated Demo Sequence for Cogno Valley Review Panel
   const handleRunFullDemoStory = () => {
     setIsDemoRunning(true);
@@ -248,7 +349,7 @@ export default function Home() {
         createdAt: 'Just now',
         elapsedSeconds: 185,
         slaLimitSeconds: 300,
-        beforeImageUrl: 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=800&q=80',
+        beforeImageUrl: '/media/restroom-corridor.jpg',
       };
       setTickets((prev) => [demoTicket, ...prev]);
       addToast('Ticket TKT-1090 created', 'Dwell threshold exceeded in Food Court.', 'warning');
@@ -284,7 +385,7 @@ export default function Home() {
                 ...t,
                 status: 'resolved',
                 resolvedAt: 'Just now',
-                afterImageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80',
+                afterImageUrl: '/media/lobby.jpg',
               }
             : t
         )
@@ -360,6 +461,7 @@ export default function Home() {
                 onTriggerTicketFromBox={handleTriggerTicketFromBox}
                 persistenceThresholdSec={persistenceThresholdSec}
                 onUpdateThreshold={(val) => setPersistenceThresholdSec(val)}
+                onCreateTicketFromDetection={handleCreateTicketFromDetection}
               />
             </div>
           </section>

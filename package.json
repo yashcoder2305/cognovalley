@@ -4,9 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:all": "node scripts/dev-all.mjs",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "scan:server": "..\\..\\venv\\Scripts\\python.exe server\\inference_service.py",
+    "scan:install": "..\\..\\venv\\Scripts\\python.exe -m pip install -r server\\requirements.txt"
   },
   "dependencies": {
     "clsx": "^2.1.1",
