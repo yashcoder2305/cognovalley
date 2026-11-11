@@ -16,6 +16,7 @@ import { VisionFeed } from '@/components/VisionFeed';
 import { IncidentsTable } from '@/components/IncidentsTable';
 import { VerificationPanel } from '@/components/VerificationPanel';
 import { DemoModal } from '@/components/DemoModal';
+import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { Toast, ToastMessage } from '@/components/Toast';
 
 export default function Home() {
@@ -26,8 +27,10 @@ export default function Home() {
   const [verifications, setVerifications] = useState<VerificationPair[]>(INITIAL_VERIFICATIONS);
   const [persistenceThresholdSec, setPersistenceThresholdSec] = useState<number>(180);
 
-  // Demo modal state
+  // Modal states
   const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [demoStep, setDemoStep] = useState<number>(0);
   const [isDemoRunning, setIsDemoRunning] = useState<boolean>(false);
   const [isSimulatingSpill, setIsSimulatingSpill] = useState<boolean>(false);
@@ -79,6 +82,37 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Global Keyboard Shortcuts (Linear style)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setIsShortcutsModalOpen((prev) => !prev);
+      } else if (e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        setIsDemoModalOpen(true);
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleTriggerSimulatedWaste();
+      } else if (e.key === 'Escape') {
+        setIsDemoModalOpen(false);
+        setIsShortcutsModalOpen(false);
+        setIsMobileMenuOpen(false);
+      } else if (['1', '2', '3', '4', '5'].includes(e.key)) {
+        const idx = Number(e.key) - 1;
+        if (zones[idx]) {
+          setSelectedZoneId(zones[idx].id);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zones]);
+
   // Action: Operator dispatches housekeeping staff
   const handleAssignTicket = (ticketId: string) => {
     setTickets((prev) =>
@@ -115,7 +149,6 @@ export default function Home() {
       )
     );
 
-    // Boost zone cleanliness score back up
     setZones((prev) =>
       prev.map((z) =>
         z.id === selectedZoneId
@@ -172,7 +205,6 @@ export default function Home() {
 
     setBoundingBoxes((prev) => [newBox, ...prev]);
 
-    // Lower zone cleanliness
     setZones((prev) =>
       prev.map((z) =>
         z.id === selectedZoneId
@@ -279,8 +311,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-950 flex text-zinc-100 antialiased selection:bg-zinc-800">
-      {/* Left Sidebar */}
-      <Sidebar activeIncidentsCount={activeIncidentsCount} />
+      {/* Left Sidebar (Desktop + Mobile drawer) */}
+      <Sidebar 
+        activeIncidentsCount={activeIncidentsCount} 
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+      />
 
       {/* Main Workspace */}
       <div className="flex-1 flex flex-col min-w-0">
@@ -289,6 +325,9 @@ export default function Home() {
           onOpenDemoModal={() => setIsDemoModalOpen(true)}
           onTriggerSimulatedWaste={handleTriggerSimulatedWaste}
           isSimulating={isSimulatingSpill}
+          onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+          onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+          activeIncidentsCount={activeIncidentsCount}
         />
 
         {/* KPI Strip */}
@@ -351,6 +390,12 @@ export default function Home() {
         onRunFullDemoStory={handleRunFullDemoStory}
         demoStep={demoStep}
         isDemoRunning={isDemoRunning}
+      />
+
+      {/* Shortcuts Guide Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
 
       {/* Floating Operational Toast Notifications */}
