@@ -1,16 +1,17 @@
-export type ZoneStatus = 'pristine' | 'warning' | 'critical';
+export type ZoneStatus = 'optimal' | 'warning' | 'critical';
 
 export interface Zone {
   id: string;
   name: string;
   code: string;
-  cleanlinessScore: number; // 0 - 100%
+  cleanlinessScore: number; // 0 - 100
+  history: number[]; // Last 6 recorded readings for mini sparkline
   status: ZoneStatus;
-  litterDensity: number; // e.g. items per 100 sq meters or % density
+  litterDensity: number; // percentage
   activeIncidents: number;
   lastInspection: string;
-  cameraIds: string[];
-  areaType: 'Food Court' | 'Corridor' | 'Restroom' | 'Entry Concourse' | 'Outdoor Plaza';
+  cameraId: string;
+  areaType: string;
 }
 
 export type DetectionType = 'overflowing_bin' | 'litter_debris' | 'garbage_bag' | 'liquid_spill';
@@ -19,20 +20,20 @@ export interface BoundingBox {
   id: string;
   type: DetectionType;
   label: string;
-  confidence: number; // e.g. 0.94
-  coordinates: { x: number; y: number; width: number; height: number }; // normalized 0-100%
+  confidence: number; // 0 - 1
+  coordinates: { x: number; y: number; width: number; height: number }; // percentage
   persistenceSeconds: number;
-  thresholdSeconds: number; // SLA threshold
-  status: 'monitoring' | 'breached' | 'cleared';
-  color: string;
+  thresholdSeconds: number;
+  detectedAt: string;
+  status: 'monitoring' | 'breached';
 }
 
-export type TicketState = 'OPEN' | 'ASSIGNED' | 'CLEANED';
-export type TicketPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type TicketState = 'open' | 'assigned' | 'resolved';
+export type TicketPriority = 'critical' | 'high' | 'medium' | 'low';
 
 export interface HousekeepingTicket {
   id: string;
-  code: string;
+  ticketNumber: string;
   title: string;
   zoneId: string;
   zoneName: string;
@@ -44,28 +45,24 @@ export interface HousekeepingTicket {
   slaLimitSeconds: number;
   assignedStaff?: {
     name: string;
-    avatar: string;
+    role: string;
     badgeId: string;
     etaMinutes?: number;
   };
   beforeImageUrl: string;
   afterImageUrl?: string;
   resolvedAt?: string;
-  resolutionTimeMinutes?: number;
 }
 
 export interface VerificationPair {
   id: string;
-  ticketId: string;
+  ticketNumber: string;
   zoneName: string;
   detectedAt: string;
   cleanedAt: string;
   beforeImage: string;
   afterImage: string;
-  wasteTypesFound: string[];
-  cleanlinessDelta: {
-    beforeScore: number;
-    afterScore: number;
-  };
+  litterTypes: string[];
+  cleanlinessBefore: number;
+  cleanlinessAfter: number;
 }
-

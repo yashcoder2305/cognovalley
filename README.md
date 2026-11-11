@@ -60,3 +60,4 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 - **Styling**: Tailwind CSS (Tactical Dark Command Center Theme)
 - **Icons**: Lucide React
 - **Animations**: Framer Motion & CSS Scanlines
+

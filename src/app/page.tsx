@@ -8,13 +8,15 @@ import {
   INITIAL_VERIFICATIONS 
 } from '@/data/mockData';
 import { Zone, BoundingBox, HousekeepingTicket, VerificationPair } from '@/types';
-import { Navbar } from '@/components/Navbar';
-import { CleanlinessGauge } from '@/components/CleanlinessGauge';
-import { ZoneScorecards } from '@/components/ZoneScorecards';
-import { VisionStreamHUD } from '@/components/VisionStreamHUD';
-import { VisualVerificationSlider } from '@/components/VisualVerificationSlider';
-import { HousekeepingTracker } from '@/components/HousekeepingTracker';
-import { DemoControlPanel } from '@/components/DemoControlPanel';
+import { Sidebar } from '@/components/Sidebar';
+import { Header } from '@/components/Header';
+import { MetricsBar } from '@/components/MetricsBar';
+import { ZoneList } from '@/components/ZoneList';
+import { VisionFeed } from '@/components/VisionFeed';
+import { IncidentsTable } from '@/components/IncidentsTable';
+import { VerificationPanel } from '@/components/VerificationPanel';
+import { DemoModal } from '@/components/DemoModal';
+import { Toast, ToastMessage } from '@/components/Toast';
 
 export default function Home() {
   const [zones, setZones] = useState<Zone[]>(INITIAL_ZONES);
@@ -22,24 +24,38 @@ export default function Home() {
   const [boundingBoxes, setBoundingBoxes] = useState<BoundingBox[]>(INITIAL_BOUNDING_BOXES);
   const [tickets, setTickets] = useState<HousekeepingTicket[]>(INITIAL_TICKETS);
   const [verifications, setVerifications] = useState<VerificationPair[]>(INITIAL_VERIFICATIONS);
-  const [persistenceThresholdSec, setPersistenceThresholdSec] = useState<number>(180); // 3 minutes
+  const [persistenceThresholdSec, setPersistenceThresholdSec] = useState<number>(180);
 
-  // Demo panel state
+  // Demo modal state
   const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
   const [demoStep, setDemoStep] = useState<number>(0);
   const [isDemoRunning, setIsDemoRunning] = useState<boolean>(false);
   const [isSimulatingSpill, setIsSimulatingSpill] = useState<boolean>(false);
 
-  // Selected Zone object
+  // Toast notifications
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (title: string, description: string, type: 'info' | 'warning' | 'success') => {
+    const id = `toast-${Date.now()}`;
+    setToasts((prev) => [...prev, { id, title, description, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const handleDismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
   const currentZone = zones.find((z) => z.id === selectedZoneId) || zones[0];
 
   // Dynamic Overall Facility Cleanliness Score calculation
-  const overallCleanlinessScore = Math.round(
-    zones.reduce((acc, curr) => acc + curr.cleanlinessScore, 0) / zones.length
+  const overallCleanlinessScore = Number(
+    (zones.reduce((acc, curr) => acc + curr.cleanlinessScore, 0) / zones.length).toFixed(1)
   );
 
   const criticalZonesCount = zones.filter((z) => z.cleanlinessScore < 70).length;
-  const activeIncidentsCount = tickets.filter((t) => t.status !== 'CLEANED').length;
+  const activeIncidentsCount = tickets.filter((t) => t.status !== 'resolved').length;
 
   // Real-time ticking effect for persistence dwell timers
   useEffect(() => {
@@ -53,7 +69,7 @@ export default function Home() {
 
       setTickets((prev) =>
         prev.map((t) =>
-          t.status !== 'CLEANED'
+          t.status !== 'resolved'
             ? { ...t, elapsedSeconds: t.elapsedSeconds + 1 }
             : t
         )
@@ -70,10 +86,10 @@ export default function Home() {
         t.id === ticketId
           ? {
               ...t,
-              status: 'ASSIGNED',
+              status: 'assigned',
               assignedStaff: {
-                name: 'Anand Kumar (Attendant)',
-                avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+                name: 'Anand Kumar',
+                role: 'Area Custodian',
                 badgeId: 'HK-772',
                 etaMinutes: 3,
               },
@@ -81,6 +97,7 @@ export default function Home() {
           : t
       )
     );
+    addToast('Staff dispatched', 'Anand Kumar (HK-772) assigned. ETA 3 mins.', 'info');
   };
 
   // Action: Mark cleaned & verified
@@ -90,7 +107,7 @@ export default function Home() {
         t.id === ticketId
           ? {
               ...t,
-              status: 'CLEANED',
+              status: 'resolved',
               resolvedAt: 'Just now',
               afterImageUrl: 'https://images.unsplash.com/photo-1584824486509-112e4181ff6b?auto=format&fit=crop&w=800&q=80',
             }
@@ -105,25 +122,28 @@ export default function Home() {
           ? {
               ...z,
               cleanlinessScore: Math.min(98, z.cleanlinessScore + 25),
-              status: 'pristine',
+              history: [...z.history.slice(1), Math.min(98, z.cleanlinessScore + 25)],
+              status: 'optimal',
               activeIncidents: Math.max(0, z.activeIncidents - 1),
             }
           : z
       )
     );
+
+    addToast('Incident resolved', `${currentZone.name} verified clean. Cleanliness score restored.`, 'success');
   };
 
   // Action: Trigger ticket manually from a bounding box
   const handleTriggerTicketFromBox = (box: BoundingBox) => {
     const newTicket: HousekeepingTicket = {
       id: `tkt-${Date.now()}`,
-      code: `BB-TKT-${Math.floor(100 + Math.random() * 900)}`,
-      title: `${box.label} persistent breach`,
+      ticketNumber: `TKT-${Math.floor(1085 + Math.random() * 40)}`,
+      title: `${box.label} exceeds persistence threshold`,
       zoneId: currentZone.id,
       zoneName: currentZone.name,
       type: box.type,
-      priority: 'CRITICAL',
-      status: 'OPEN',
+      priority: 'critical',
+      status: 'open',
       createdAt: 'Just now',
       elapsedSeconds: box.persistenceSeconds,
       slaLimitSeconds: 300,
@@ -131,6 +151,7 @@ export default function Home() {
     };
 
     setTickets((prev) => [newTicket, ...prev]);
+    addToast('Maintenance ticket opened', `${newTicket.ticketNumber} generated for ${currentZone.name}.`, 'warning');
   };
 
   // Action: Simulate a spill incident
@@ -140,13 +161,13 @@ export default function Home() {
     const newBox: BoundingBox = {
       id: `box-${Date.now()}`,
       type: 'overflowing_bin',
-      label: 'OVERFLOWING_BIN [BIN-09]',
-      confidence: 0.954,
-      coordinates: { x: 35, y: 45, width: 20, height: 35 },
-      persistenceSeconds: 195, // already breached threshold!
+      label: 'Overflowing recycle bin',
+      confidence: 0.95,
+      coordinates: { x: 38, y: 44, width: 20, height: 36 },
+      persistenceSeconds: 195,
       thresholdSeconds: persistenceThresholdSec,
+      detectedAt: 'Just now',
       status: 'breached',
-      color: '#ef4444',
     };
 
     setBoundingBoxes((prev) => [newBox, ...prev]);
@@ -157,7 +178,8 @@ export default function Home() {
         z.id === selectedZoneId
           ? {
               ...z,
-              cleanlinessScore: Math.max(35, z.cleanlinessScore - 22),
+              cleanlinessScore: Math.max(38, z.cleanlinessScore - 20),
+              history: [...z.history.slice(1), Math.max(38, z.cleanlinessScore - 20)],
               status: 'critical',
               activeIncidents: z.activeIncidents + 1,
             }
@@ -165,11 +187,10 @@ export default function Home() {
       )
     );
 
-    // Auto generate ticket after 1.5s
     setTimeout(() => {
       handleTriggerTicketFromBox(newBox);
       setIsSimulatingSpill(false);
-    }, 1500);
+    }, 1200);
   };
 
   // Action: Automated Demo Sequence for Cogno Valley Review Panel
@@ -177,61 +198,59 @@ export default function Home() {
     setIsDemoRunning(true);
     setDemoStep(1);
 
-    // Step 1: Detect Waste
     setTimeout(() => {
-      setDemoStep(2); // Dwell threshold breach
+      setDemoStep(2);
     }, 2000);
 
-    // Step 2: Auto Generate Ticket
     setTimeout(() => {
       setDemoStep(3);
       const demoTicket: HousekeepingTicket = {
         id: `demo-${Date.now()}`,
-        code: 'BB-TKT-990',
-        title: 'Litter Overflow - Food Court Station 1',
+        ticketNumber: 'TKT-1090',
+        title: 'Food waste and cup overflow',
         zoneId: 'zone-1',
-        zoneName: 'Food Court & Dining Plaza',
+        zoneName: 'Food Court - West Dining',
         type: 'overflowing_bin',
-        priority: 'CRITICAL',
-        status: 'OPEN',
+        priority: 'critical',
+        status: 'open',
         createdAt: 'Just now',
         elapsedSeconds: 185,
         slaLimitSeconds: 300,
         beforeImageUrl: 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=800&q=80',
       };
       setTickets((prev) => [demoTicket, ...prev]);
+      addToast('Ticket TKT-1090 created', 'Dwell threshold exceeded in Food Court.', 'warning');
     }, 4000);
 
-    // Step 3: Dispatch Housekeeper
     setTimeout(() => {
       setDemoStep(4);
       setTickets((prev) =>
         prev.map((t) =>
-          t.code === 'BB-TKT-990'
+          t.ticketNumber === 'TKT-1090'
             ? {
                 ...t,
-                status: 'ASSIGNED',
+                status: 'assigned',
                 assignedStaff: {
-                  name: 'Priya Sharma (Specialist)',
-                  avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&q=80',
+                  name: 'Priya Sharma',
+                  role: 'Rapid Response Lead',
                   badgeId: 'HK-201',
-                  etaMinutes: 1,
+                  etaMinutes: 2,
                 },
               }
             : t
         )
       );
+      addToast('Housekeeper dispatched', 'Priya Sharma assigned to TKT-1090.', 'info');
     }, 6000);
 
-    // Step 4: Visual Verification & Cleanliness Recovery
     setTimeout(() => {
       setDemoStep(5);
       setTickets((prev) =>
         prev.map((t) =>
-          t.code === 'BB-TKT-990'
+          t.ticketNumber === 'TKT-1090'
             ? {
                 ...t,
-                status: 'CLEANED',
+                status: 'resolved',
                 resolvedAt: 'Just now',
                 afterImageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=800&q=80',
               }
@@ -239,97 +258,103 @@ export default function Home() {
         )
       );
 
-      // Rebound score
       setZones((prev) =>
         prev.map((z) =>
           z.id === 'zone-1'
-            ? { ...z, cleanlinessScore: 96, status: 'pristine', activeIncidents: 0 }
+            ? {
+                ...z,
+                cleanlinessScore: 96,
+                history: [...z.history.slice(1), 96],
+                status: 'optimal',
+                activeIncidents: 0,
+              }
             : z
         )
       );
 
+      addToast('Demo completed', 'Verification verified. Cleanliness restored to 96%.', 'success');
       setIsDemoRunning(false);
     }, 8500);
   };
 
   return (
-    <div className="min-h-screen bg-tactical-950 flex flex-col text-slate-100">
-      {/* Top Navbar */}
-      <Navbar
-        overallScore={overallCleanlinessScore}
-        activeIncidentsCount={activeIncidentsCount}
-        onOpenDemoModal={() => setIsDemoModalOpen(true)}
-        onTriggerSimulatedWaste={handleTriggerSimulatedWaste}
-        isSimulating={isSimulatingSpill}
-      />
+    <div className="min-h-screen bg-zinc-950 flex text-zinc-100 antialiased selection:bg-zinc-800">
+      {/* Left Sidebar */}
+      <Sidebar activeIncidentsCount={activeIncidentsCount} />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Row 1: Executive KPI Gauge & Telemetry */}
-        <section>
-          <CleanlinessGauge
-            score={overallCleanlinessScore}
-            zonesCount={zones.length}
-            criticalZonesCount={criticalZonesCount}
-            averageResponseMinutes={6.4}
-          />
-        </section>
+      {/* Main Workspace */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <Header
+          onOpenDemoModal={() => setIsDemoModalOpen(true)}
+          onTriggerSimulatedWaste={handleTriggerSimulatedWaste}
+          isSimulating={isSimulatingSpill}
+        />
 
-        {/* Row 2: Two Column Operational Hub */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* Left Column: Zone Scorecards & Map Telemetry (4 cols) */}
-          <div className="lg:col-span-4 h-full min-h-[500px]">
-            <ZoneScorecards
-              zones={zones}
-              selectedZoneId={selectedZoneId}
-              onSelectZone={(id) => setSelectedZoneId(id)}
-            />
-          </div>
+        {/* KPI Strip */}
+        <MetricsBar
+          score={overallCleanlinessScore}
+          criticalZonesCount={criticalZonesCount}
+          totalZones={zones.length}
+          openIncidentsCount={activeIncidentsCount}
+          averageResponseMinutes={4.2}
+        />
 
-          {/* Right Column: Real-time Vision Stream HUD (8 cols) */}
-          <div className="lg:col-span-8 h-full min-h-[500px]">
-            <VisionStreamHUD
-              currentZone={currentZone}
-              boundingBoxes={boundingBoxes}
-              onTriggerTicketFromBox={handleTriggerTicketFromBox}
-              persistenceThresholdSec={persistenceThresholdSec}
-              onUpdateThreshold={(val) => setPersistenceThresholdSec(val)}
-            />
-          </div>
-        </section>
+        {/* Dashboard Content Container */}
+        <main className="p-4 sm:p-6 space-y-6 max-w-7xl">
+          {/* Row 1: Two Column Layout (Zones List + Hero Vision Feed) */}
+          <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Zone List (4 cols) */}
+            <div className="lg:col-span-4">
+              <ZoneList
+                zones={zones}
+                selectedZoneId={selectedZoneId}
+                onSelectZone={(id) => setSelectedZoneId(id)}
+              />
+            </div>
 
-        {/* Row 3: Housekeeping Dispatch Tracker & Visual Verification Slider */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* Left: Housekeeping Triage Board (6 cols) */}
-          <div className="lg:col-span-6 h-full min-h-[460px]">
-            <HousekeepingTracker
-              tickets={tickets}
-              onAssignTicket={handleAssignTicket}
-              onResolveTicket={handleResolveTicket}
-            />
-          </div>
+            {/* Right Column: Hero Live Vision Feed (8 cols) */}
+            <div className="lg:col-span-8">
+              <VisionFeed
+                currentZone={currentZone}
+                boundingBoxes={boundingBoxes}
+                onTriggerTicketFromBox={handleTriggerTicketFromBox}
+                persistenceThresholdSec={persistenceThresholdSec}
+                onUpdateThreshold={(val) => setPersistenceThresholdSec(val)}
+              />
+            </div>
+          </section>
 
-          {/* Right: Visual Verification Slider (6 cols) */}
-          <div className="lg:col-span-6 h-full min-h-[460px]">
-            <VisualVerificationSlider verifications={verifications} />
-          </div>
-        </section>
-      </main>
+          {/* Row 2: Housekeeping Incidents Table & Visual Verification */}
+          <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left: Real Incidents Table (7 cols) */}
+            <div className="lg:col-span-7">
+              <IncidentsTable
+                tickets={tickets}
+                onAssignTicket={handleAssignTicket}
+                onResolveTicket={handleResolveTicket}
+              />
+            </div>
 
-      {/* Footer */}
-      <footer className="border-t border-tactical-800/80 bg-tactical-950 py-4 px-6 text-center text-xs text-slate-500 font-mono">
-        BIN BUZZ // FACILITY HYGIENE PLATFORM • COGNO VALLEY LABS × CHRIST UNIVERSITY INTERNSHIP • TRACK E
-      </footer>
+            {/* Right: Visual Verification Split-Slider (5 cols) */}
+            <div className="lg:col-span-5">
+              <VerificationPanel verifications={verifications} />
+            </div>
+          </section>
+        </main>
+      </div>
 
-      {/* Demo Modal Walkthrough */}
-      <DemoControlPanel
+      {/* Demo Modal */}
+      <DemoModal
         isOpen={isDemoModalOpen}
         onClose={() => setIsDemoModalOpen(false)}
         onRunFullDemoStory={handleRunFullDemoStory}
         demoStep={demoStep}
         isDemoRunning={isDemoRunning}
       />
+
+      {/* Floating Operational Toast Notifications */}
+      <Toast toasts={toasts} onDismiss={handleDismissToast} />
     </div>
   );
 }
-
